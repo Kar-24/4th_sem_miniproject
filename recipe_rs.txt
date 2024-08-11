@@ -1,0 +1,538 @@
+package minip.demo;
+
+import javax.swing.*;
+import java.awt.*;
+import java.awt.event.*;
+import java.sql.*;
+
+@SuppressWarnings("unused")
+public class demo extends JFrame {
+	private static final long serialVersionUID = 1L;
+
+	public demo() {
+        setTitle("Recipe Recommendation Service");
+        setSize(800, 600);
+        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        setLayout(new FlowLayout());
+
+        JButton newCustomerButton = new JButton("New Customer");
+        newCustomerButton.addActionListener(e -> showNewCustomerDialog());
+        add(newCustomerButton);
+
+        JButton customerLoginButton = new JButton("Customer Login");
+        customerLoginButton.addActionListener(e -> showLoginDialogForRecipe());
+        add(customerLoginButton);
+
+        JButton newSellerButton = new JButton("New Seller");
+        newSellerButton.addActionListener(e -> showNewSellerDialog());
+        add(newSellerButton);
+
+        JButton sellerLoginButton = new JButton("Seller Login");
+        sellerLoginButton.addActionListener(e -> showLoginDialogForSeller());
+        add(sellerLoginButton);
+    }
+
+    private void showNewCustomerDialog() {
+        JDialog customerDialog = new JDialog(this, "New Customer", true);
+        customerDialog.setSize(400, 600);
+        customerDialog.setLayout(new GridLayout(12, 2));
+
+        String[] labels = {"First Name", "Last Name", "Username", "Password", "Email", "Gender", "Phone Number", "Weight", "Disease", "Age", "Preferences"};
+        JTextField[] fields = new JTextField[labels.length];
+        JPasswordField passwordField = new JPasswordField();
+
+        for (int i = 0; i < labels.length; i++) {
+            customerDialog.add(new JLabel(labels[i]));
+            if (i == 3) {
+                customerDialog.add(passwordField);
+            } else {
+                fields[i] = new JTextField();
+                customerDialog.add(fields[i]);
+            }
+        }
+
+        JButton submitButton = new JButton("Submit");
+        submitButton.addActionListener(e -> {
+            try {
+                String firstName = fields[0].getText();
+                String lastName = fields[1].getText();
+                String username = fields[2].getText();
+                String password = new String(passwordField.getPassword());
+                String email = fields[4].getText();
+                String gender = fields[5].getText();
+                String phoneNumber = fields[6].getText();
+                float weight = Float.parseFloat(fields[7].getText());
+                String disease = fields[8].getText();
+                int age = Integer.parseInt(fields[9].getText());
+                String preferences = fields[10].getText();
+
+                addNewCustomer(firstName, lastName, username, password, email, gender, phoneNumber, weight, disease, age, preferences);
+                customerDialog.dispose();
+            } catch (NumberFormatException ex) {
+                JOptionPane.showMessageDialog(this, "Please enter valid input.");
+            }
+        });
+
+        customerDialog.add(new JLabel());
+        customerDialog.add(submitButton);
+
+        customerDialog.setVisible(true);
+    }
+
+    private void addNewCustomer(String firstName, String lastName, String username, String password, String email, String gender, String phoneNumber, float weight, String disease, int age, String preferences) {
+        String url = "jdbc:mysql://localhost:3306/mini_project";
+        String user = "root";
+        String dbPassword = "root";
+
+        String query = "INSERT INTO Customer (First_Name, Last_Name, Username, Password, Email, Gender, Phone_Number, Weight, Disease, Age, Preferences) " +
+                       "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+
+        try (Connection conn = DriverManager.getConnection(url, user, dbPassword);
+             PreparedStatement stmt = conn.prepareStatement(query)) {
+
+            stmt.setString(1, firstName);
+            stmt.setString(2, lastName);
+            stmt.setString(3, username);
+            stmt.setString(4, password);
+            stmt.setString(5, email);
+            stmt.setString(6, gender);
+            stmt.setString(7, phoneNumber);
+            stmt.setFloat(8, weight);
+            stmt.setString(9, disease);
+            stmt.setInt(10, age);
+            stmt.setString(11, preferences);
+
+            int rowsInserted = stmt.executeUpdate();
+            if (rowsInserted > 0) {
+                JOptionPane.showMessageDialog(this, "New customer added successfully!");
+            }
+
+        } catch (SQLException e) {
+            e.printStackTrace();
+            JOptionPane.showMessageDialog(this, "Database error: " + e.getMessage());
+        }
+    }
+
+    private void showLoginDialogForRecipe() {
+        JDialog loginDialog = new JDialog(this, "Customer Login", true);
+        loginDialog.setSize(300, 200);
+        loginDialog.setLayout(new GridLayout(3, 2));
+
+        JLabel usernameLabel = new JLabel("Username:");
+        JTextField usernameField = new JTextField();
+        JLabel passwordLabel = new JLabel("Password:");
+        JPasswordField passwordField = new JPasswordField();
+
+        JButton loginButton = new JButton("Login");
+        loginButton.addActionListener(e -> {
+            authenticateCustomerForRecipe(usernameField.getText(), new String(passwordField.getPassword()));
+            loginDialog.dispose();
+        });
+
+        loginDialog.add(usernameLabel);
+        loginDialog.add(usernameField);
+        loginDialog.add(passwordLabel);
+        loginDialog.add(passwordField);
+        loginDialog.add(new JLabel());
+        loginDialog.add(loginButton);
+
+        loginDialog.setVisible(true);
+    }
+
+    private void authenticateCustomerForRecipe(String username, String password) {
+        String url = "jdbc:mysql://localhost:3306/mini_project";
+        String user = "root";
+        String pass = "root";
+
+        String query = "SELECT * FROM Customer WHERE Username = ? AND Password = ?";
+
+        try (Connection conn = DriverManager.getConnection(url, user, pass);
+             PreparedStatement stmt = conn.prepareStatement(query)) {
+
+            stmt.setString(1, username);
+            stmt.setString(2, password);
+            ResultSet rs = stmt.executeQuery();
+
+            if (rs.next()) {
+                showRecommendedRecipeDialog(rs.getInt("Customer_ID"), rs.getString("Disease"));
+            } else {
+                JOptionPane.showMessageDialog(this, "Invalid username or password.");
+            }
+
+        } catch (SQLException e) {
+            e.printStackTrace();
+            JOptionPane.showMessageDialog(this, "Database error: " + e.getMessage());
+        }
+    }
+
+    private void showRecommendedRecipeDialog(int customerId, String disease) {
+        JDialog recommendationDialog = new JDialog(this, "Recommended Recipes", true);
+        recommendationDialog.setSize(400, 600);
+        recommendationDialog.setLayout(new GridLayout(0, 1));
+
+        String url = "jdbc:mysql://localhost:3306/mini_project";
+        String user = "root";
+        String password = "root";
+
+        String query = "SELECT r.Recipe_Id, r.Recipe_Name, r.Description " +
+                       "FROM Recipe r " +
+                       "WHERE NOT EXISTS (SELECT 1 FROM Recipe_Ingredient ri JOIN Ingredient i ON ri.Ingredient_Id = i.Ingredient_Id WHERE ri.Recipe_Id = r.Recipe_Id AND i.Diseases LIKE ?)";
+
+        try (Connection conn = DriverManager.getConnection(url, user, password);
+             PreparedStatement stmt = conn.prepareStatement(query)) {
+
+            stmt.setString(1, "%" + disease + "%");
+            ResultSet rs = stmt.executeQuery();
+
+            while (rs.next()) {
+                String recipeName = rs.getString("Recipe_Name");
+                String description = rs.getString("Description");
+                int recipeId = rs.getInt("Recipe_Id");
+
+                JButton recipeButton = new JButton(recipeName + ": " + description);
+                recipeButton.addActionListener(e -> showRecipeDetails(recipeId));
+                recommendationDialog.add(recipeButton);
+            }
+
+        } catch (SQLException e) {
+            e.printStackTrace();
+            JOptionPane.showMessageDialog(this, "Database error: " + e.getMessage());
+        }
+
+        recommendationDialog.setVisible(true);
+    }
+
+    private void showRecipeDetails(int recipeId) {
+        JDialog recipeDetailsDialog = new JDialog(this, "Recipe Details", true);
+        recipeDetailsDialog.setSize(400, 600);
+        recipeDetailsDialog.setLayout(new GridLayout(0, 1));
+
+        String url = "jdbc:mysql://localhost:3306/mini_project";
+        String user = "root";
+        String password = "root";
+
+        String query = "SELECT r.Recipe_Name, r.Description, r.Instructions " +
+                       "FROM Recipe r " +
+                       "WHERE r.Recipe_Id = ?";
+
+        try (Connection conn = DriverManager.getConnection(url, user, password);
+             PreparedStatement stmt = conn.prepareStatement(query)) {
+
+            stmt.setInt(1, recipeId);
+            ResultSet rs = stmt.executeQuery();
+
+            if (rs.next()) {
+                recipeDetailsDialog.add(new JLabel("Recipe Name: " + rs.getString("Recipe_Name")));
+                recipeDetailsDialog.add(new JLabel("Description: " + rs.getString("Description")));
+                recipeDetailsDialog.add(new JLabel("Instructions: " + rs.getString("Instructions")));
+
+                String ingredientQuery = "SELECT i.Ingredient_Name, ri.Quantity " +
+                                         "FROM Recipe_Ingredient ri " +
+                                         "JOIN Ingredient i ON ri.Ingredient_Id = i.Ingredient_Id " +
+                                         "WHERE ri.Recipe_Id = ?";
+
+                try (PreparedStatement ingredientStmt = conn.prepareStatement(ingredientQuery)) {
+                    ingredientStmt.setInt(1, recipeId);
+                    ResultSet ingredientRs = ingredientStmt.executeQuery();
+
+                    while (ingredientRs.next()) {
+                        recipeDetailsDialog.add(new JLabel("Ingredient: " + ingredientRs.getString("Ingredient_Name") + ", Quantity: " + ingredientRs.getString("Quantity")));
+                    }
+                }
+            }
+
+        } catch (SQLException e) {
+            e.printStackTrace();
+            JOptionPane.showMessageDialog(this, "Database error: " + e.getMessage());
+        }
+
+        recipeDetailsDialog.setVisible(true);
+    }
+
+    private void showNewSellerDialog() {
+        JDialog sellerDialog = new JDialog(this, "New Seller", true);
+        sellerDialog.setSize(400, 400);
+        sellerDialog.setLayout(new GridLayout(6, 2));
+
+        String[] labels = {"Seller Name", "Username", "Password", "Phone Number", "Age", "Gender"};
+        JTextField[] fields = new JTextField[labels.length];
+        JPasswordField passwordField = new JPasswordField();
+
+        for (int i = 0; i < labels.length; i++) {
+            sellerDialog.add(new JLabel(labels[i]));
+            if (i == 2) {
+                sellerDialog.add(passwordField);
+            } else {
+                fields[i] = new JTextField();
+                sellerDialog.add(fields[i]);
+            }
+        }
+
+        JButton submitButton = new JButton("Submit");
+        submitButton.addActionListener(e -> {
+            try {
+                String sellerName = fields[0].getText();
+                String username = fields[1].getText();
+                String password = new String(passwordField.getPassword());
+                String phoneNumber = fields[3].getText();
+                int age = Integer.parseInt(fields[4].getText());
+                String gender = fields[5].getText();
+
+                addNewSeller(sellerName, username, password, phoneNumber, age, gender);
+                sellerDialog.dispose();
+            } catch (NumberFormatException ex) {
+                JOptionPane.showMessageDialog(this, "Please enter valid input.");
+            }
+        });
+
+        sellerDialog.add(new JLabel());
+        sellerDialog.add(submitButton);
+
+        sellerDialog.setVisible(true);
+    }
+
+    private void addNewSeller(String sellerName, String username, String password, String phoneNumber, int age, String gender) {
+        String url = "jdbc:mysql://localhost:3306/mini_project";
+        String user = "root";
+        String dbPassword = "root";
+
+        String query = "INSERT INTO Seller (Seller_Name, Username, Password, Phone_Number, Age, Gender) " +
+                       "VALUES (?, ?, ?, ?, ?, ?)";
+
+        try (Connection conn = DriverManager.getConnection(url, user, dbPassword);
+             PreparedStatement stmt = conn.prepareStatement(query)) {
+
+            stmt.setString(1, sellerName);
+            stmt.setString(2, username);
+            stmt.setString(3, password);
+            stmt.setString(4, phoneNumber);
+            stmt.setInt(5, age);
+            stmt.setString(6, gender);
+
+            int rowsInserted = stmt.executeUpdate();
+            if (rowsInserted > 0) {
+                JOptionPane.showMessageDialog(this, "New seller added successfully!");
+            }
+
+        } catch (SQLException e) {
+            e.printStackTrace();
+            JOptionPane.showMessageDialog(this, "Database error: " + e.getMessage());
+        }
+    }
+
+    private void showLoginDialogForSeller() {
+        JDialog loginDialog = new JDialog(this, "Seller Login", true);
+        loginDialog.setSize(300, 200);
+        loginDialog.setLayout(new GridLayout(3, 2));
+
+        JLabel usernameLabel = new JLabel("Username:");
+        JTextField usernameField = new JTextField();
+        JLabel passwordLabel = new JLabel("Password:");
+        JPasswordField passwordField = new JPasswordField();
+
+        JButton loginButton = new JButton("Login");
+        loginButton.addActionListener(e -> {
+            authenticateSeller(usernameField.getText(), new String(passwordField.getPassword()));
+            loginDialog.dispose();
+        });
+
+        loginDialog.add(usernameLabel);
+        loginDialog.add(usernameField);
+        loginDialog.add(passwordLabel);
+        loginDialog.add(passwordField);
+        loginDialog.add(new JLabel());
+        loginDialog.add(loginButton);
+
+        loginDialog.setVisible(true);
+    }
+
+    private void authenticateSeller(String username, String password) {
+        String url = "jdbc:mysql://localhost:3306/mini_project";
+        String user = "root";
+        String pass = "root";
+
+        String query = "SELECT * FROM Seller WHERE Username = ? AND Password = ?";
+
+        try (Connection conn = DriverManager.getConnection(url, user, pass);
+             PreparedStatement stmt = conn.prepareStatement(query)) {
+
+            stmt.setString(1, username);
+            stmt.setString(2, password);
+            ResultSet rs = stmt.executeQuery();
+
+            if (rs.next()) {
+                showRecipeEntryDialog(rs.getInt("Seller_ID"));
+            } else {
+                JOptionPane.showMessageDialog(this, "Invalid username or password.");
+            }
+
+        } catch (SQLException e) {
+            e.printStackTrace();
+            JOptionPane.showMessageDialog(this, "Database error: " + e.getMessage());
+        }
+    }
+
+    private void showRecipeEntryDialog(int sellerId) {
+        JDialog recipeDialog = new JDialog(this, "Enter New Recipe", true);
+        recipeDialog.setSize(400, 600);
+        recipeDialog.setLayout(new GridLayout(10, 2));
+
+        String[] labels = {"Recipe Name", "Description", "Instructions", "Cuisine Type", "Prep Time", "Cook Time", "Total Time", "Servings"};
+        JTextField[] fields = new JTextField[labels.length];
+
+        for (int i = 0; i < labels.length; i++) {
+            recipeDialog.add(new JLabel(labels[i]));
+            fields[i] = new JTextField();
+            recipeDialog.add(fields[i]);
+        }
+
+        JButton nextButton = new JButton("Next");
+        nextButton.addActionListener(e -> {
+            String recipeName = fields[0].getText();
+            String description = fields[1].getText();
+            String instructions = fields[2].getText();
+            String cuisineType = fields[3].getText();
+            int prepTime = Integer.parseInt(fields[4].getText());
+            int cookTime = Integer.parseInt(fields[5].getText());
+            int totalTime = Integer.parseInt(fields[6].getText());
+            int servings = Integer.parseInt(fields[7].getText());
+
+            addNewRecipe(sellerId, recipeName, description, instructions, cuisineType, prepTime, cookTime, totalTime, servings, recipeDialog);
+        });
+
+        recipeDialog.add(new JLabel());
+        recipeDialog.add(nextButton);
+
+        recipeDialog.setVisible(true);
+    }
+
+    private void addNewRecipe(int sellerId, String recipeName, String description, String instructions, String cuisineType, int prepTime, int cookTime, int totalTime, int servings, JDialog parentDialog) {
+        String url = "jdbc:mysql://localhost:3306/mini_project";
+        String user = "root";
+        String password = "root";
+
+        String query = "INSERT INTO Recipe (Recipe_Name, Description, Instructions, Cuisine_Type, Prep_Time, Cook_Time, Total_Time, Servings) " +
+                       "VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
+
+        try (Connection conn = DriverManager.getConnection(url, user, password);
+             PreparedStatement stmt = conn.prepareStatement(query, Statement.RETURN_GENERATED_KEYS)) {
+
+            stmt.setString(1, recipeName);
+            stmt.setString(2, description);
+            stmt.setString(3, instructions);
+            stmt.setString(4, cuisineType);
+            stmt.setInt(5, prepTime);
+            stmt.setInt(6, cookTime);
+            stmt.setInt(7, totalTime);
+            stmt.setInt(8, servings);
+
+            int rowsInserted = stmt.executeUpdate();
+            if (rowsInserted > 0) {
+                ResultSet generatedKeys = stmt.getGeneratedKeys();
+                if (generatedKeys.next()) {
+                    int recipeId = generatedKeys.getInt(1);
+                    parentDialog.dispose();
+                    showIngredientEntryDialog(sellerId, recipeId);
+                }
+            }
+
+        } catch (SQLException e) {
+            e.printStackTrace();
+            JOptionPane.showMessageDialog(this, "Database error: " + e.getMessage());
+        }
+    }
+
+    private void showIngredientEntryDialog(int sellerId, int recipeId) {
+        JDialog ingredientDialog = new JDialog(this, "Enter Ingredients", true);
+        ingredientDialog.setSize(400, 600);
+        ingredientDialog.setLayout(new GridLayout(0, 2));
+
+        JLabel ingredientNameLabel = new JLabel("Ingredient Name:");
+        JTextField ingredientNameField = new JTextField();
+        JLabel quantityLabel = new JLabel("Quantity:");
+        JTextField quantityField = new JTextField();
+
+        JButton addButton = new JButton("Add Ingredient");
+        addButton.addActionListener(e -> {
+            String ingredientName = ingredientNameField.getText();
+            int quantity = Integer.parseInt(quantityField.getText());
+
+            addIngredientToRecipe(sellerId, recipeId, ingredientName, quantity);
+            ingredientNameField.setText("");
+            quantityField.setText("");
+        });
+
+        ingredientDialog.add(ingredientNameLabel);
+        ingredientDialog.add(ingredientNameField);
+        ingredientDialog.add(quantityLabel);
+        ingredientDialog.add(quantityField);
+        ingredientDialog.add(new JLabel());
+        ingredientDialog.add(addButton);
+
+        JButton doneButton = new JButton("Done");
+        doneButton.addActionListener(e -> ingredientDialog.dispose());
+
+        ingredientDialog.add(new JLabel());
+        ingredientDialog.add(doneButton);
+
+        ingredientDialog.setVisible(true);
+    }
+
+    private void addIngredientToRecipe(int sellerId, int recipeId, String ingredientName, int quantity) {
+        String url = "jdbc:mysql://localhost:3306/mini_project";
+        String user = "root";
+        String password = "root";
+
+        String ingredientQuery = "SELECT Ingredient_Id FROM Ingredient WHERE Ingredient_Name = ?";
+
+        try (Connection conn = DriverManager.getConnection(url, user, password);
+             PreparedStatement ingredientStmt = conn.prepareStatement(ingredientQuery)) {
+
+            ingredientStmt.setString(1, ingredientName);
+            ResultSet rs = ingredientStmt.executeQuery();
+
+            if (rs.next()) {
+                int ingredientId = rs.getInt("Ingredient_Id");
+                addIngredientToRecipeTable(recipeId, ingredientId, quantity);
+            } else {
+                JOptionPane.showMessageDialog(this, "Ingredient not found: " + ingredientName);
+            }
+
+        } catch (SQLException e) {
+            e.printStackTrace();
+            JOptionPane.showMessageDialog(this, "Database error: " + e.getMessage());
+        }
+    }
+
+    private void addIngredientToRecipeTable(int recipeId, int ingredientId, int quantity) {
+        String url = "jdbc:mysql://localhost:3306/mini_project";
+        String user = "root";
+        String password = "root";
+
+        String query = "INSERT INTO Recipe_Ingredient (Recipe_Id, Ingredient_Id, Quantity) VALUES (?, ?, ?)";
+
+        try (Connection conn = DriverManager.getConnection(url, user, password);
+             PreparedStatement stmt = conn.prepareStatement(query)) {
+
+            stmt.setInt(1, recipeId);
+            stmt.setInt(2, ingredientId);
+            stmt.setInt(3, quantity);
+
+            int rowsInserted = stmt.executeUpdate();
+            if (rowsInserted > 0) {
+                JOptionPane.showMessageDialog(this, "Ingredient added successfully to the recipe!");
+            }
+
+        } catch (SQLException e) {
+            e.printStackTrace();
+            JOptionPane.showMessageDialog(this, "Database error: " + e.getMessage());
+        }
+    }
+
+    public static void main(String[] args) {
+        SwingUtilities.invokeLater(() -> {
+            demo frame = new demo();
+            frame.setVisible(true);
+        });
+    }
+}
